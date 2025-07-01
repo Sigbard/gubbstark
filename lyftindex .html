@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Styrketräning för Löpare</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chosen Palette: Calm Harmony -->
+    <!-- Application Structure Plan: The SPA uses a daily-tab navigation structure (Mån-Sön) to present the weekly workout plan. This was chosen because the source report is inherently day-based, and users will likely want to view one day's workout at a time. The app defaults to the current day for immediate relevance. A collapsible "Viktiga Råd" section keeps general advice accessible but unobtrusive. A weekly overview chart provides a quick visual summary of workout durations, helping the user understand the week's intensity at a glance. A "Kort Tutorial" section explains how to use the app and its timers. The timer is integrated per exercise to guide the user through the workout. A new LLM-powered feature allows users to request alternative exercises, enhancing flexibility. This structure prioritizes a task-oriented user flow: "What is my workout for today/a specific day? How do I time it? Can I find an alternative exercise?". -->
+    <!-- Visualization & Content Choices:
+    - Weekly Schedule -> Navigation -> Clickable Day Buttons (HTML/JS) -> Intuitive daily navigation.
+    - Daily Workout -> Organization -> Content Cards (HTML/JS) -> Hides/shows content to reduce clutter.
+    - Workout Duration -> Comparison -> Bar Chart (Chart.js) -> Provides a quick visual summary of weekly effort distribution.
+    - Key Advice -> Information -> Collapsible Accordion (HTML/JS) -> Makes important context available without cluttering the main view.
+    - Short Tutorial -> Information -> Collapsible Accordion (HTML/JS) -> Guides the user on app usage.
+    - Exercises -> Information + Interaction -> Styled Lists (HTML/Tailwind) + Timer (JS) -> Clear instructions combined with interactive timing for each exercise.
+    - Alternative Exercise Suggestion -> LLM Integration -> Button (HTML/JS) + Text Display (HTML/JS) -> Allows dynamic generation of exercise alternatives using Gemini API, enhancing workout flexibility.
+    - CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 40vh;
+        }
+        .day-button.active {
+            background-color: #374151;
+            color: #F9FAFB;
+        }
+        .day-content {
+            display: none;
+        }
+        .day-content.active {
+            display: block;
+        }
+        .collapsible-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-out;
+        }
+        .timer-display {
+            font-variant-numeric: tabular-nums;
+        }
+    </style>
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 sm:p-6 md:p-8 max-w-4xl">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Styrketräning för Löpare</h1>
+            <p class="text-gray-600 mt-2">Ditt veckoupplägg för att komplettera löpningen.</p>
+        </header>
+
+        <section id="tutorial-section" class="mb-6 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <button id="tutorial-toggle" class="flex justify-between items-center w-full text-left">
+                <h2 class="text-xl font-semibold text-gray-800">Kort Tutorial</h2>
+                <span id="tutorial-arrow" class="transform transition-transform duration-300">▼</span>
+            </button>
+            <div id="tutorial-content" class="collapsible-content mt-4 text-gray-700 space-y-2">
+                <p>Välkommen till ditt interaktiva träningsprogram! Här är hur du använder appen:</p>
+                <ul class="list-disc list-inside space-y-1">
+                    <li><strong>Navigera dagar:</strong> Använd knapparna högst upp för att växla mellan veckans dagar och se dagens pass.</li>
+                    <li><strong>Starta övningstimer:</strong> Klicka på "Starta övning" bredvid varje övning för att starta en nedräkning (standard 45 sekunder).</li>
+                    <li><strong>Återställ timer:</strong> Klicka på "Återställ" för att nollställa timern.</li>
+                    <li><strong>Viktiga råd:</strong> Vik ut sektionen "Viktiga Råd & Principer" för allmänna tips om träningen.</li>
+                    <li><strong>Få alternativa övningar ✨:</strong> Klicka på "Föreslå alternativ övning" för att få ett AI-genererat förslag på en liknande övning.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="info-section" class="mb-8 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <button id="info-toggle" class="flex justify-between items-center w-full text-left">
+                <h2 class="text-xl font-semibold text-gray-800">Viktiga Råd & Principer</h2>
+                <span id="info-arrow" class="transform transition-transform duration-300">▼</span>
+            </button>
+            <div id="info-content" class="collapsible-content mt-4 text-gray-700 space-y-2">
+                <p><strong>Uppvärmning (2-3 minuter):</strong> En kort, dynamisk uppvärmning för att förbereda kroppen.</p>
+                <p><strong>Nedvarvning (2-3 minuter):</strong> Korta statiska stretchövningar för de tränade musklerna.</p>
+                <p><strong>Teknik före allt:</strong> Fokusera alltid på korrekt utförande för att undvika skador och maximera effekten. Se gärna videor för att lära dig övningarna korrekt.</p>
+                <p><strong>Progression:</strong> När övningarna känns lätta, öka antalet repetitioner, set, minska vilan eller gör en svårare variant.</p>
+                <p><strong>Lyssna på kroppen:</strong> Om du känner smärta, avbryt övningen. Det är okej att hoppa över ett pass om du känner dig trött eller har ont.</p>
+                <p><strong>Kettlebell-vikt:</strong> Använd den vikt (12 kg eller 16 kg) som känns utmanande men tillåter dig att utföra övningen med god teknik.</p>
+            </div>
+        </section>
+
+        <section class="mb-8">
+             <h2 class="text-xl font-semibold text-gray-800 text-center mb-4">Veckoöversikt (Estimerad tid)</h2>
+            <div class="chart-container bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                <canvas id="weeklyPlanChart"></canvas>
+            </div>
+        </section>
+
+        <main>
+            <nav class="flex flex-wrap justify-center gap-2 mb-8">
+            </nav>
+
+            <div id="workouts-container">
+            </div>
+        </main>
+
+        <footer class="text-center mt-12 text-gray-500 text-sm">
+            <p>Anpassat träningsprogram. Kom ihåg att värma upp och varva ner.</p>
+        </footer>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const DEFAULT_EXERCISE_DURATION = 45; // seconds
+
+            const workoutData = [
+                {
+                    day: "Måndag",
+                    dayShort: "Mån",
+                    focus: "Explosivitet & Underkropp",
+                    duration: "15-20 min",
+                    avgDuration: 17.5,
+                    warmup: {
+                        duration: "2 min",
+                        desc: "Lätta armcirklar, benpendlingar framåt/bakåt."
+                    },
+                    exercises: [
+                        { name: "Kettlebell Swings", details: "3-4 set, 10-15 reps. Fokusera på höftdriv.", type: "explosivitet i underkroppen", equipment: "kettlebell 12kg eller 16kg" },
+                        { name: "Hoppknäböj (Jump Squats)", details: "3-4 set, 8-12 reps. Explosivt hopp.", type: "explosivitet i underkroppen", equipment: "kroppsvikt" }
+                    ],
+                    cooldown: {
+                        duration: "2 min",
+                        desc: "Liggande baksida lår stretch, höftböjarstretch."
+                    }
+                },
+                {
+                    day: "Tisdag",
+                    dayShort: "Tis",
+                    focus: "Överkropp Styrka",
+                    duration: "20-25 min",
+                    avgDuration: 22.5,
+                    warmup: {
+                        duration: "2 min",
+                        desc: "Axelrullningar, lätta armsträckningar."
+                    },
+                    exercises: [
+                        { name: "Armhävningar (Push-ups)", details: "3 set, Max reps med god form.", type: "överkopps styrka", equipment: "kroppsvikt" },
+                        { name: "Kettlebell Rodd (Bent-over Kettlebell Row)", details: "3 set, 8-12 reps per arm.", type: "överkopps styrka (rygg)", equipment: "kettlebell 12kg eller 16kg" },
+                        { name: "Kettlebell Around the Globe", details: "3 set, 8-10 reps per riktning.", type: "överkopps rörlighet och axelstyrka", equipment: "kettlebell 12kg" }
+                    ],
+                    cooldown: {
+                        duration: "2 min",
+                        desc: "Bröststretch mot dörrkarm, axelstretch."
+                    }
+                },
+                {
+                    day: "Onsdag",
+                    dayShort: "Ons",
+                    focus: "Core & Stabilitet",
+                    duration: "15-20 min",
+                    avgDuration: 17.5,
+                    warmup: {
+                        duration: "2 min",
+                        desc: "Katt-ko, bäckenrullningar."
+                    },
+                    exercises: [
+                        { name: "Planka (Plank)", details: "3 set, Håll 30-60 sekunder.", type: "core stabilitet", equipment: "kroppsvikt" },
+                        { name: "Russian Twists (med kettlebell)", details: "3 set, 15-20 reps per sida.", type: "core rotation", equipment: "kettlebell 12kg" },
+                        { name: "Bird-dog", details: "3 set, 10-12 reps per sida. Kontrollerat.", type: "core stabilitet och balans", equipment: "kroppsvikt" }
+                    ],
+                    cooldown: {
+                        duration: "2 min",
+                        desc: "Liggande ryggstretch, höftstretch."
+                    }
+                },
+                {
+                    day: "Torsdag",
+                    dayShort: "Tors",
+                    focus: "Helkropp Kondition & Styrka",
+                    duration: "25-30 min",
+                    avgDuration: 27.5,
+                    warmup: {
+                        duration: "3 min",
+                        desc: "Jumping Jacks, höga knän på stället."
+                    },
+                    exercises: [
+                        { name: "Goblet Squats (Kettlebell)", details: "3-4 varv, 10-15 reps.", type: "underkroppsstyrka", equipment: "kettlebell 12kg eller 16kg" },
+                        { name: "Burpees (modifierade)", details: "3-4 varv, 8-12 reps.", type: "helkroppskondition och styrka", equipment: "kroppsvikt" },
+                        { name: "Mountain Climbers", details: "3-4 varv, 30-45 sekunder.", type: "core och kondition", equipment: "kroppsvikt" }
+                    ],
+                    cooldown: {
+                        duration: "2 min",
+                        desc: "Hela kroppen stretch (t.ex. nedåtgående hund)."
+                    }
+                },
+                 {
+                    day: "Fredag",
+                    dayShort: "Fre",
+                    focus: "Enbensstyrka & Balans",
+                    duration: "15-20 min",
+                    avgDuration: 17.5,
+                    warmup: {
+                        duration: "2 min",
+                        desc: "Benpendlingar i sidled, enbensbalans."
+                    },
+                    exercises: [
+                        { name: "Kettlebell Enbens Marklyft (Single-leg Deadlift)", details: "3-4 set, 8-10 reps per ben.", type: "enbensstyrka och balans", equipment: "kettlebell 12kg" },
+                        { name: "Utfallssteg (Walking Lunges)", details: "3-4 set, 8-12 reps per ben.", type: "enbensstyrka", equipment: "kroppsvikt" }
+                    ],
+                    cooldown: {
+                        duration: "2 min",
+                        desc: "Framsida lår stretch, vadstretch."
+                    }
+                },
+                {
+                    day: "Lördag",
+                    dayShort: "Lör",
+                    focus: "Överkropp & Rörlighet",
+                    duration: "20-25 min",
+                    avgDuration: 22.5,
+                    warmup: {
+                        duration: "2 min",
+                        desc: "Lätta armcirklar, nackrullningar."
+                    },
+                    exercises: [
+                        { name: "Dips (på stol/bänk)", details: "3 set, Max reps med god form.", type: "överkopps styrka (triceps/bröst)", equipment: "kroppsvikt" },
+                        { name: "Kettlebell Overhead Press (en arm)", details: "3 set, 8-10 reps per arm.", type: "axelstyrka", equipment: "kettlebell 12kg" },
+                        { name: "Kettlebell Around the Globe", details: "3 set, 8-10 reps per riktning.", type: "överkopps rörlighet och axelstyrka", equipment: "kettlebell 12kg" }
+                    ],
+                    cooldown: {
+                        duration: "2 min",
+                        desc: "Axelstretch, tricepsstretch."
+                    }
+                },
+                {
+                    day: "Söndag",
+                    dayShort: "Sön",
+                    focus: "Aktiv Återhämtning / Låg Intensitet",
+                    duration: "15-20 min",
+                    avgDuration: 17.5,
+                    warmup: {
+                        duration: "2 min",
+                        desc: "Lätta, lugna rörelser."
+                    },
+                    exercises: [
+                        { name: "Långsamma knäböj (kroppsvikt)", details: "10-15 reps.", type: "rörlighet och underkropp", equipment: "kroppsvikt" },
+                        { name: "Höftöppnare (t.ex. Pigeon Pose)", details: "Håll 30-60 sek per sida.", type: "höftrörlighet", equipment: "kroppsvikt" },
+                        { name: "Bröstöppnare", details: "Håll 30-60 sekunder.", type: "bröströrlighet", equipment: "kroppsvikt" },
+                        { name: "Andningsövningar", details: "Fokusera på djup magandning i några minuter.", type: "återhämtning", equipment: "kroppsvikt" }
+                    ],
+                    cooldown: {
+                        duration: "0 min",
+                        desc: ""
+                    }
+                }
+            ];
+
+            const navContainer = document.querySelector('nav');
+            const workoutsContainer = document.getElementById('workouts-container');
+            let timers = {}; 
+            let timerIntervals = {}; 
+
+            function formatTime(seconds) {
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = seconds % 60;
+                return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+            }
+
+            function startTimer(exerciseId, duration) {
+                if (timerIntervals[exerciseId]) {
+                    clearInterval(timerIntervals[exerciseId]);
+                }
+                timers[exerciseId] = duration;
+                const timerDisplay = document.getElementById(`timer-display-${exerciseId}`);
+                const startButton = document.getElementById(`start-timer-${exerciseId}`);
+                const resetButton = document.getElementById(`reset-timer-${exerciseId}`);
+
+                timerDisplay.textContent = formatTime(timers[exerciseId]);
+                startButton.disabled = true;
+                resetButton.disabled = false;
+
+                timerIntervals[exerciseId] = setInterval(() => {
+                    timers[exerciseId]--;
+                    timerDisplay.textContent = formatTime(timers[exerciseId]);
+
+                    if (timers[exerciseId] <= 0) {
+                        clearInterval(timerIntervals[exerciseId]);
+                        timerDisplay.textContent = "Klar!";
+                        startButton.disabled = false;
+                        resetButton.disabled = true;
+                        
+                    }
+                }, 1000);
+            }
+
+            function resetTimer(exerciseId) {
+                clearInterval(timerIntervals[exerciseId]);
+                timers[exerciseId] = DEFAULT_EXERCISE_DURATION;
+                document.getElementById(`timer-display-${exerciseId}`).textContent = formatTime(timers[exerciseId]);
+                document.getElementById(`start-timer-${exerciseId}`).disabled = false;
+                document.getElementById(`reset-timer-${exerciseId}`).disabled = true;
+            }
+
+            async function getAlternativeExercise(exerciseName, exerciseType, equipment) {
+                // Generate a safe ID for the display element
+                const safeExerciseNameForId = exerciseName.replace(/[^a-zA-Z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+                const altExerciseDisplay = document.getElementById(`alt-exercise-display-${safeExerciseNameForId}`);
+                const altExerciseButton = document.getElementById(`alt-exercise-button-${safeExerciseNameForId}`);
+                
+                altExerciseDisplay.innerHTML = '<span class="text-gray-500">Laddar...</span>';
+                altExerciseButton.disabled = true;
+
+                try {
+                    let chatHistory = [];
+                    const prompt = `Ge mig en alternativ övning för ${exerciseName} som fokuserar på ${exerciseType}, och som kan utföras med ${equipment}. Ge endast namnet på övningen och en kort beskrivning (max 20 ord). Svara på svenska.`;
+                    chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                    const payload = { contents: chatHistory };
+                    const apiKey = ""; 
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                    
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        const text = result.candidates[0].content.parts[0].text;
+                        altExerciseDisplay.innerHTML = `<p class="text-sm text-gray-700 mt-2"><strong>Alternativ:</strong> ${text}</p>`;
+                    } else {
+                        altExerciseDisplay.innerHTML = '<p class="text-sm text-red-500 mt-2">Kunde inte hitta ett alternativ just nu.</p>';
+                    }
+                } catch (error) {
+                    altExerciseDisplay.innerHTML = '<p class="text-sm text-red-500 mt-2">Ett fel uppstod vid hämtning av alternativ.</p>';
+                    console.error("Error fetching alternative exercise:", error);
+                } finally {
+                    altExerciseButton.disabled = false;
+                }
+            }
+
+            workoutData.forEach((data, dayIndex) => {
+                const button = document.createElement('button');
+                button.textContent = data.dayShort;
+                button.className = `day-button px-4 py-2 rounded-md font-medium text-gray-700 bg-white shadow-sm border border-gray-200 hover:bg-gray-100 transition-colors`;
+                button.dataset.day = dayIndex;
+                navContainer.appendChild(button);
+
+                const workoutDiv = document.createElement('div');
+                workoutDiv.className = 'day-content p-4 sm:p-6 bg-white rounded-lg shadow-sm border border-gray-200';
+                workoutDiv.dataset.day = dayIndex;
+                
+                let exercisesHtml = data.exercises.map((ex, exIndex) => {
+                    const exerciseId = `day${dayIndex}-ex${exIndex}`;
+                    // Updated safeExerciseName generation
+                    const safeExerciseName = ex.name.replace(/[^a-zA-Z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+                    timers[exerciseId] = DEFAULT_EXERCISE_DURATION; 
+                    return `
+                    <li class="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b pb-3 mb-3 last:border-b-0 last:pb-0 last:mb-0">
+                        <div class="flex items-start mb-2 sm:mb-0 w-full sm:w-auto">
+                            <span class="text-green-600 mr-3 mt-1 sm:mt-0">✓</span>
+                            <div>
+                                <p class="font-semibold">${ex.name}</p>
+                                <p class="text-gray-600 text-sm">${ex.details}</p>
+                                <div id="alt-exercise-display-${safeExerciseName}" class="mt-1"></div>
+                            </div>
+                        </div>
+                        <div class="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 ml-6 sm:ml-0 mt-2 sm:mt-0">
+                            <div class="flex items-center space-x-2">
+                                <span id="timer-display-${exerciseId}" class="timer-display font-mono text-lg text-gray-800 w-16 text-right">${formatTime(DEFAULT_EXERCISE_DURATION)}</span>
+                                <button id="start-timer-${exerciseId}" class="bg-indigo-500 text-white px-3 py-1 rounded-md text-sm hover:bg-indigo-600 transition-colors">Starta övning</button>
+                                <button id="reset-timer-${exerciseId}" class="bg-gray-300 text-gray-800 px-3 py-1 rounded-md text-sm hover:bg-gray-400 transition-colors" disabled>Återställ</button>
+                            </div>
+                            <button id="alt-exercise-button-${safeExerciseName}" 
+                                data-exercise-name="${ex.name}" 
+                                data-exercise-type="${ex.type}" 
+                                data-equipment="${ex.equipment}"
+                                class="bg-purple-500 text-white px-3 py-1 rounded-md text-sm hover:bg-purple-600 transition-colors w-full sm:w-auto">
+                                ✨ Föreslå alternativ övning
+                            </button>
+                        </div>
+                    </li>`;
+                }).join('');
+
+                workoutDiv.innerHTML = `
+                    <div class="flex justify-between items-baseline mb-4">
+                        <h3 class="text-2xl font-bold text-gray-900">${data.day}</h3>
+                        <span class="text-sm font-medium text-gray-500">${data.duration}</span>
+                    </div>
+                    <p class="text-indigo-600 font-semibold mb-6">${data.focus}</p>
+                    
+                    <div class="space-y-6">
+                        <div>
+                            <h4 class="font-semibold text-lg mb-2 border-b pb-1">Uppvärmning (${data.warmup.duration})</h4>
+                            <p class="text-gray-700">${data.warmup.desc}</p>
+                        </div>
+                        
+                        <div>
+                            <h4 class="font-semibold text-lg mb-2 border-b pb-1">Övningar</h4>
+                            <ul class="space-y-3">${exercisesHtml}</ul>
+                        </div>
+                        
+                        ${data.cooldown.duration !== '0 min' ? `
+                        <div>
+                            <h4 class="font-semibold text-lg mb-2 border-b pb-1">Nedvarvning (${data.cooldown.duration})</h4>
+                            <p class="text-gray-700">${data.cooldown.desc}</p>
+                        </div>` : ''}
+                    </div>
+                `;
+                workoutsContainer.appendChild(workoutDiv);
+
+                data.exercises.forEach((ex, exIndex) => {
+                    const exerciseId = `day${dayIndex}-ex${exIndex}`;
+                    // Updated safeExerciseName generation
+                    const safeExerciseName = ex.name.replace(/[^a-zA-Z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+                    workoutDiv.querySelector(`#start-timer-${exerciseId}`).addEventListener('click', () => startTimer(exerciseId, DEFAULT_EXERCISE_DURATION));
+                    workoutDiv.querySelector(`#reset-timer-${exerciseId}`).addEventListener('click', () => resetTimer(exerciseId));
+                    
+                    const altButton = workoutDiv.querySelector(`#alt-exercise-button-${safeExerciseName}`);
+                    if (altButton) {
+                        altButton.addEventListener('click', () => {
+                            getAlternativeExercise(
+                                altButton.dataset.exerciseName,
+                                altButton.dataset.exerciseType,
+                                altButton.dataset.equipment
+                            );
+                        });
+                    }
+                });
+            });
+
+            const dayButtons = document.querySelectorAll('.day-button');
+            const dayContents = document.querySelectorAll('.day-content');
+
+            function showDay(dayIndex) {
+                dayButtons.forEach(btn => btn.classList.remove('active'));
+                dayContents.forEach(content => content.classList.remove('active'));
+
+                document.querySelector(`.day-button[data-day='${dayIndex}']`).classList.add('active');
+                document.querySelector(`.day-content[data-day='${dayIndex}']`).classList.add('active');
+            }
+
+            dayButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    showDay(button.dataset.day);
+                });
+            });
+
+            const today = new Date().getDay();
+            const dayIndex = (today === 0) ? 6 : today - 1; 
+            showDay(dayIndex);
+
+            const infoToggle = document.getElementById('info-toggle');
+            const infoContent = document.getElementById('info-content');
+            const infoArrow = document.getElementById('info-arrow');
+            infoToggle.addEventListener('click', () => {
+                if (infoContent.style.maxHeight) {
+                    infoContent.style.maxHeight = null;
+                    infoArrow.style.transform = 'rotate(0deg)';
+                } else {
+                    infoContent.style.maxHeight = infoContent.scrollHeight + "px";
+                    infoArrow.style.transform = 'rotate(180deg)';
+                }
+            });
+
+            const tutorialToggle = document.getElementById('tutorial-toggle');
+            const tutorialContent = document.getElementById('tutorial-content');
+            const tutorialArrow = document.getElementById('tutorial-arrow');
+            tutorialToggle.addEventListener('click', () => {
+                if (tutorialContent.style.maxHeight) {
+                    tutorialContent.style.maxHeight = null;
+                    tutorialArrow.style.transform = 'rotate(0deg)';
+                } else {
+                    tutorialContent.style.maxHeight = tutorialContent.scrollHeight + "px";
+                    tutorialArrow.style.transform = 'rotate(180deg)';
+                }
+            });
+            
+            const ctx = document.getElementById('weeklyPlanChart').getContext('2d');
+            const weeklyPlanChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: workoutData.map(d => d.dayShort),
+                    datasets: [{
+                        label: 'Minuter',
+                        data: workoutData.map(d => d.avgDuration),
+                        backgroundColor: 'rgba(79, 70, 229, 0.7)',
+                        borderColor: 'rgba(79, 70, 229, 1)',
+                        borderWidth: 1,
+                        borderRadius: 5,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Estimerad Träningstid (min)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                             callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y + ' min';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
